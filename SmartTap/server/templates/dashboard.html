@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SmartTap Dashboard</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #111827; color: #e5e7eb; margin: 0; padding: 24px; }
+    h1 { margin: 0 0 4px; font-size: 22px; }
+    #status { margin-bottom: 20px; font-size: 14px; color: #9ca3af; }
+    .online { color: #34d399 !important; }
+    .offline { color: #f87171 !important; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .card { background: #1f2937; border-radius: 10px; padding: 16px; }
+    .label { font-size: 12px; text-transform: uppercase; color: #9ca3af; }
+    .value { font-size: 28px; font-weight: 600; margin-top: 6px; }
+    canvas { background: #1f2937; border-radius: 10px; width: 100%; height: 200px; display: block; margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+  <h1>SmartTap Dashboard</h1>
+  <div id="status">Waiting for data...</div>
+
+  <div class="grid">
+    <div class="card"><div class="label">Flow</div><div class="value" id="flow">-</div></div>
+    <div class="card"><div class="label">Total</div><div class="value" id="total">-</div></div>
+    <div class="card"><div class="label">ToF distance</div><div class="value" id="distance">-</div></div>
+    <div class="card"><div class="label">Device uptime</div><div class="value" id="uptime">-</div></div>
+  </div>
+
+  <canvas id="flowChart" width="800" height="200"></canvas>
+  <canvas id="distanceChart" width="800" height="200"></canvas>
+
+  <script>
+    const POLL_MS = 1000;
+    const OFFLINE_AFTER_S = 5;
+
+    function setText(id, text) {
+      document.getElementById(id).textContent = text;
+    }
+
+    function formatValue(value, digits, unit) {
+      return (value === null || value === undefined) ? "-" : `${Number(value).toFixed(digits)} ${unit}`;
+    }
+
+    function formatDistance(latest) {
+      if (latest.tof_ok === false) return "not initialised";
+      if (latest.tof_valid === false) return "out of range";
+      return formatValue(latest.distance_mm, 0, "mm");
+    }
+
+    function drawChart(canvasId, values, color, label) {
+      const canvas = document.getElementById(canvasId);
+      const ctx = canvas.getContext("2d");
+      const w = canvas.width, h = canvas.height, pad = 30;
+      ctx.clearRect(0, 0, w, h);
+
+      ctx.fillStyle = "#9ca3af";
+      ctx.font = "12px system-ui, sans-serif";
+      ctx.fillText(label, 10, 16);
+
+      const numbers = values.filter(v => typeof v === "number");
+      if (numbers.length < 2) return;
+
+      const max = Math.max(...numbers, 1);
+      const min = Math.min(...numbers, 0);
+      const span = (max - min) || 1;
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      let started = false;
+      values.forEach((v, i) => {
+        if (typeof v !== "number") return;
+        const x = pad + (i / (values.length - 1)) * (w - pad * 2);
+        const y = h - pad - ((v - min) / span) * (h - pad * 2);
+        if (started) {
+          ctx.lineTo(x, y);
+        } else {
+          ctx.moveTo(x, y);
+          started = true;
+        }
+      });
+      ctx.stroke();
+    }
+
+    async function refresh() {
+      const status = document.getElementById("status");
+      try {
+        const response = await fetch("/api/history", { cache: "no-store" });
+        const { latest, history } = await response.json();
+
+        if (!latest) {
+          status.textContent = "Waiting for ESP32 telemetry...";
+          status.className = "";
+          return;
+        }
+
+        const online = latest.age_s <= OFFLINE_AFTER_S;
+        status.textContent = `${latest.device} - last update ${latest.received_at} (${latest.age_s}s ago) - ${online ? "online" : "offline"}`;
+        status.className = online ? "online" : "offline";
+
+        setText("flow", formatValue(latest.flow_lpm, 2, "L/min"));
+        setText("total", formatValue(latest.total_litres, 3, "L"));
+        setText("distance", formatDistance(latest));
+        setText("uptime", formatValue(latest.uptime_ms / 1000, 0, "s"));
+
+        drawChart("flowChart", history.map(r => r.flow_lpm), "#38bdf8", "Flow (L/min)");
+        drawChart("distanceChart", history.map(r => r.tof_valid ? r.distance_mm : null), "#fbbf24", "ToF distance (mm)");
+      } catch (err) {
+        status.textContent = "Dashboard cannot reach the server";
+        status.className = "offline";
+      }
+    }
+
+    refresh();
+    setInterval(refresh, POLL_MS);
+  </script>
+</body>
+</html>
