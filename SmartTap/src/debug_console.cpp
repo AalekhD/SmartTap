@@ -13,7 +13,7 @@ static void debugTask(void *) {
     vTaskDelayUntil(&lastWake, period);
 
     SensorData snap = sensorDataSnapshot();
-    Serial.printf("Flow: %.2f L/min | Total: %.3f L | ToF: ", snap.flowLpm, snap.totalLitres);
+    //Serial.printf("Flow: %.2f L/min | Total: %.3f L | ToF: ", snap.flowLpm, snap.totalLitres);
     if (!snap.tofOk) {
       Serial.println("not initialised");
     } else if (!snap.tofValid) {

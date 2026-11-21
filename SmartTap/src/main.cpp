@@ -15,8 +15,8 @@ void setup() {
   Serial.begin(115200);
 
   sensorDataInit();
-  flowmeterInit(FLOW_PIN);
-  tofSensorInit(I2C_SDA_PIN, I2C_SCL_PIN);
+  //flowmeterInit(FLOW_PIN);
+  //tofSensorInit(I2C_SDA_PIN, I2C_SCL_PIN);
   relayControlInit(RELAY_PIN);
   debugConsoleInit();
   telemetryUploaderInit();
